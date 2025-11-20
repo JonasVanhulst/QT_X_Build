@@ -59,7 +59,9 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          mkdir deploy
+          if (-not (Test-Path "deploy")) {
+            New-Item -ItemType Directory -Path "deploy"
+          }
           $exe = Get-ChildItem build/Release/*.exe | Select-Object -First 1
           echo "Deploying $exe"
           
