@@ -1,31 +1,45 @@
 name: CI
 
-on: push # when to trigger this. Here, on every push
+on: push
+
 jobs:
   build_and_test:
-    name: "Build and test"
+    name: "Build (Qt)"
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest] # we build on GitHub-provided Windows and Linux images
-    runs-on: ${{ matrix.os }} # use value from the matrix
-    steps:
-    - name: Install dependencies (linux)
-      run: sudo apt install ninja-build
-      if: matrix.os == 'ubuntu-latest' # conditional, runs this step only on the Ubuntu runner
-    - name: Install Ninja (windows)    # Ninja is not available in GitHub-provided images,
-                                       # see https://github.com/actions/runner-images/issues/514
-      run: choco install ninja         # So let's install it through Chocolatey
-      if: matrix.os == 'windows-latest'
-    - name: Install Qt
-      uses: jurplel/install-qt-action@v3
-      with:
-        version: '6.5.2'
-    - uses: ilammy/msvc-dev-cmd@v1 # This action essentially calls vcvarsall.bat for the latest VS in the runner for x64
-    - uses: actions/checkout@v3    # Actually check out the sources. GH Actions can run for events that may not require
-                                   # sources (e.g. when someone comments on an issue)
+        os: [ubuntu-latest, windows-latest]
 
-    # Here we call CMake manually, there are solutions for that in the Marketplace: https://github.com/marketplace/actions/run-cmake
-    - name: Build
-      # We don't need to set up the environment variable for CMake to see Qt because the install-qt-action
-      # sets up the necessary variables automatically
-      run: cmake -S . -B build -G "Ninja Multi-Config" && cmake --build build --config Debug
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      # Checkout repository
+      - uses: actions/checkout@v3
+
+      # --- OS SPECIFIEKE DEPENDENCIES ---
+      - name: Install Ninja (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: Install Ninja (Windows)
+        if: matrix.os == 'windows-latest'
+        run: choco install ninja -y
+
+      # --- Install Qt ---
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: '6.5.2'
+          host: ${{ matrix.os == 'windows-latest' && 'windows' || 'linux' }}
+          target: 'desktop'
+          arch: ${{ matrix.os == 'windows-latest' && 'win64_msvc2019_64' || '' }}
+
+      # --- MSVC alleen op Windows ---
+      - name: Setup MSVC
+        if: matrix.os == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      # --- BUILD ---
+      - name: Build with CMake
+        run: |
+          cmake -S qt_build_app -B build -G "Ninja Multi-Config"
+          cmake --build build --config Release
