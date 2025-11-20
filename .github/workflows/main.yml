@@ -54,6 +54,29 @@ jobs:
           echo "Deploying $exe"
           windeployqt --release $exe.FullName --dir deploy
 
+        # --- Windows: Deploy Qt en bundel MSVC runtime DLLs ---
+      - name: Run windeployqt and bundle MSVC runtime
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          mkdir deploy
+          $exe = Get-ChildItem build/Release/*.exe | Select-Object -First 1
+          echo "Deploying $exe"
+          
+          # Deploy Qt libraries
+          windeployqt --release $exe.FullName --dir deploy
+          
+          # Locate MSVC runtime DLLs (aanpassen aan jouw VS installatie pad)
+          $msvcPath = "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Redist\MSVC"
+          $latestVersion = Get-ChildItem $msvcPath | Sort-Object Name -Descending | Select-Object -First 1
+          $dllPath = Join-Path $latestVersion.FullName "x64\Microsoft.VC142.CRT"
+      
+          # Copy runtime DLLs to deploy folder
+          Copy-Item "$dllPath\vcruntime140_1.dll" -Destination deploy
+          Copy-Item "$dllPath\msvcp140.dll" -Destination deploy
+          Copy-Item "$dllPath\concrt140.dll" -Destination deploy
+          Copy-Item "$dllPath\ucrtbase.dll" -Destination deploy
+
       # --- Upload artifacts so you can download them ---
       - name: Upload Windows artifact
         if: matrix.os == 'windows-latest'
