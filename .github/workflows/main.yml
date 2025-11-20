@@ -9,31 +9,62 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+
     steps:
     - uses: actions/checkout@v3
 
+    # ------------------------------------
+    # Linux dependencies
+    # ------------------------------------
     - name: Install dependencies (Linux)
       run: sudo apt install ninja-build
       if: matrix.os == 'ubuntu-latest'
 
+    # ------------------------------------
+    # Windows dependencies
+    # ------------------------------------
     - name: Install Ninja (Windows)
       run: choco install ninja
       if: matrix.os == 'windows-latest'
 
+    # ------------------------------------
+    # Install Qt
+    # ------------------------------------
     - name: Install Qt
       uses: jurplel/install-qt-action@v3
       with:
         version: '6.5.2'
 
+    # Needed only for MSVC on Windows
     - uses: ilammy/msvc-dev-cmd@v1
+      if: matrix.os == 'windows-latest'
 
+    # ------------------------------------
+    # Build app (correct path)
+    # ------------------------------------
     - name: Build
-      run: cmake -S qt_build_app -B build -G "Ninja Multi-Config" && cmake --build build --config Release
+      run: |
+        cmake -S QT_X_Build/qt_build_app -B build -G "Ninja Multi-Config"
+        cmake --build build --config Release
 
-    # Upload the built .exe as an artifact so you can download it from GitHub
-    - name: Upload executable
+    # ------------------------------------
+    # Windows: Deploy Qt DLLs (fix for missing DLL error!)
+    # ------------------------------------
+    - name: Deploy Qt (Windows)
+      if: matrix.os == 'windows-latest'
+      run: |
+        # Zoek exe
+        $exe = Get-ChildItem -Path build/Release -Filter *.exe | Select-Object -First 1
+        echo "Deploying: $exe"
+        windeployqt $exe.FullName
+
+    # ------------------------------------
+    # Upload build artifact (full folder)
+    # ------------------------------------
+    - name: Upload build output
       uses: actions/upload-artifact@v4
       with:
-        name: MyAppExe
-        path: build/Release/*.exe   # pas dit pad aan naar jouw echte .exe locatie
+        name: Build-${{ matrix.os }}
+        path: build/Release
+
 
