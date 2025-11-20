@@ -13,7 +13,7 @@ jobs:
 
     steps:
       # Checkout repository
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       # --- OS SPECIFIEKE DEPENDENCIES ---
       - name: Install Ninja (Linux)
@@ -30,7 +30,7 @@ jobs:
         with:
           version: '6.5.2'
           host: ${{ matrix.os == 'windows-latest' && 'windows' || 'linux' }}
-          target: 'desktop'
+          target: desktop
           arch: ${{ matrix.os == 'windows-latest' && 'win64_msvc2019_64' || '' }}
 
       # --- MSVC alleen op Windows ---
@@ -44,28 +44,28 @@ jobs:
           cmake -S qt_build_app -B build -G "Ninja Multi-Config"
           cmake --build build --config Release
 
-      # --- WINDOWS: DEPLOY QT (maak werkende .exe package) ---
+      # --- WINDOWS: DEPLOY QT (maak volledige werkende exe map) ---
       - name: Run windeployqt
         if: matrix.os == 'windows-latest'
+        shell: pwsh
         run: |
           mkdir deploy
-          # Zoek automatisch de exe
           $exe = Get-ChildItem build/Release/*.exe | Select-Object -First 1
           echo "Deploying $exe"
           windeployqt --release $exe.FullName --dir deploy
 
-      # --- WINDOWS ARTIFACT: COMPLETE APP FOLDER ---
-      - name: Upload Windows EXE + Qt DLLs
+      # --- WINDOWS ARTIFACT (upload-artifact v4) ---
+      - name: Upload Windows app
         if: matrix.os == 'windows-latest'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: windows-qt-app
           path: deploy/
 
-      # --- LINUX ARTIFACT ---
-      - name: Upload Linux Binary
+      # --- LINUX ARTIFACT (upload-artifact v4) ---
+      - name: Upload Linux binary
         if: matrix.os == 'ubuntu-latest'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: linux-qt-binary
           path: build/
