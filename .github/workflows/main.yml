@@ -29,7 +29,7 @@ jobs:
     - uses: ilammy/msvc-dev-cmd@v1
 
     - name: Build
-      run: cmake -S QT_X_Build/qt_build_app -B build -G "Ninja Multi-Config" && cmake --build build --config Release
+      run: cmake -S qt_build_app -B build -G "Ninja Multi-Config" && cmake --build build --config Release
 
     # Upload the built .exe as an artifact so you can download it from GitHub
     - name: Upload executable
