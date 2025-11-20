@@ -1,38 +1,31 @@
-name: Build Qt App
+name: CI
 
-on:
-  push:
-  pull_request:
-
+on: push # when to trigger this. Here, on every push
 jobs:
-  build-windows:
-    runs-on: windows-latest
-
+  build_and_test:
+    name: "Build and test"
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest] # we build on GitHub-provided Windows and Linux images
+    runs-on: ${{ matrix.os }} # use value from the matrix
     steps:
-      # 1. Checkout repo
-      - name: Checkout repository
-        uses: actions/checkout@v3
+    - name: Install dependencies (linux)
+      run: sudo apt install ninja-build
+      if: matrix.os == 'ubuntu-latest' # conditional, runs this step only on the Ubuntu runner
+    - name: Install Ninja (windows)    # Ninja is not available in GitHub-provided images,
+                                       # see https://github.com/actions/runner-images/issues/514
+      run: choco install ninja         # So let's install it through Chocolatey
+      if: matrix.os == 'windows-latest'
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: '6.5.2'
+    - uses: ilammy/msvc-dev-cmd@v1 # This action essentially calls vcvarsall.bat for the latest VS in the runner for x64
+    - uses: actions/checkout@v3    # Actually check out the sources. GH Actions can run for events that may not require
+                                   # sources (e.g. when someone comments on an issue)
 
-      # 2. Install Qt using aqtinstall
-      - name: Install Qt
-        uses: jurplel/install-qt-action@v3
-        with:
-          version: '6.5.3'
-          host: 'windows'
-          target: 'desktop'
-          arch: 'win64_msvc2019_64'
-
-      # 3. Configure CMake
-      - name: Configure CMake
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
-
-      # 4. Build project
-      - name: Build
-        run: cmake --build build --config Release
-
-      # 5. Upload build artifacts
-      - name: Upload Windows Artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: windows-qt-build
-          path: build/Release/
+    # Here we call CMake manually, there are solutions for that in the Marketplace: https://github.com/marketplace/actions/run-cmake
+    - name: Build
+      # We don't need to set up the environment variable for CMake to see Qt because the install-qt-action
+      # sets up the necessary variables automatically
+      run: cmake -S . -B build -G "Ninja Multi-Config" && cmake --build build --config Debug
