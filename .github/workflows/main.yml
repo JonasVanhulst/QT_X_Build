@@ -5,55 +5,73 @@ on:
 
 jobs:
   build:
-    name: "Build Qt App"
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, raspberrypi]
+        os: [windows-latest, ubuntu-latest, raspberrypi]
     runs-on: ${{ matrix.os == 'raspberrypi' && 'ubuntu-latest' || matrix.os }}
 
     steps:
       - uses: actions/checkout@v4
 
-      # --- OS dependencies ---
+      # --- Install Ninja ---
       - name: Install Ninja
         if: matrix.os != 'windows-latest'
-        run: sudo apt-get update && sudo apt-get install -y ninja-build
+        run: sudo apt-get update && sudo apt-get install -y ninja-build cmake
 
       - name: Install Ninja (Windows)
         if: matrix.os == 'windows-latest'
         run: choco install ninja -y
 
-      # --- Install Qt ---
-      - name: Install Qt
+      # --- Windows: Install Qt ---
+      - name: Install Qt (Windows)
+        if: matrix.os == 'windows-latest'
         uses: jurplel/install-qt-action@v3
         with:
           version: '6.5.2'
-          host: ${{ matrix.os == 'windows-latest' && 'windows' || 'linux' }}
+          host: windows
           target: desktop
-          arch: ${{ matrix.os == 'windows-latest' && 'win64_msvc2019_64' || (matrix.os == 'raspberrypi' && 'arm64') || '' }}
+          arch: win64_msvc2022_64  # Let op: MSVC 2022
 
-      # --- MSVC setup ---
+      # --- Windows: Setup MSVC ---
       - name: Setup MSVC
         if: matrix.os == 'windows-latest'
         uses: ilammy/msvc-dev-cmd@v1
 
-      # --- Build ---
-      - name: Build with CMake
+      # --- Build Windows/Linux ---
+      - name: Build Windows/Linux
+        if: matrix.os != 'raspberrypi'
         run: |
           cmake -S qt_build_app -B build -G "Ninja Multi-Config"
           cmake --build build --config Release
 
-      # --- Windows Deploy ---
+      # --- Raspberry Pi: Build in Docker ---
+      - name: Build for Raspberry Pi (ARM)
+        if: matrix.os == 'raspberrypi'
+        run: |
+          docker run --rm -v $PWD:/app -w /app balenalib/raspberrypi-debian:bullseye-build \
+          bash -c "\
+            apt-get update && apt-get install -y qt6-base-dev qt6-base-dev-tools cmake ninja-build g++ && \
+            cmake -S qt_build_app -B build -G Ninja && \
+            cmake --build build \
+          "
+
+      # --- Windows: Deploy EXE + MSVC runtime ---
       - name: Deploy Windows EXE
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
           if (-not (Test-Path "deploy")) { New-Item -ItemType Directory -Path "deploy" }
           $exe = Get-ChildItem build/Release/*.exe | Select-Object -First 1
+
+          # Deploy Qt libraries
           windeployqt --release $exe.FullName --dir deploy
-          $msvcPath = "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Redist\MSVC"
-          $latestVersion = Get-ChildItem $msvcPath | Sort-Object Name -Descending | Select-Object -First 1
-          $dllPath = Join-Path $latestVersion.FullName "x64\Microsoft.VC142.CRT"
+
+          # Dynamisch laatste MSVC runtime vinden
+          $msvcPathRoot = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Redist\MSVC"
+          $latestVersion = Get-ChildItem $msvcPathRoot | Sort-Object Name -Descending | Select-Object -First 1
+          $dllPath = Join-Path $latestVersion.FullName "x64\Microsoft.VC143.CRT"
+
+          # Kopieer runtime DLLs
           Copy-Item "$dllPath\vcruntime140_1.dll" -Destination deploy
           Copy-Item "$dllPath\msvcp140.dll" -Destination deploy
           Copy-Item "$dllPath\concrt140.dll" -Destination deploy
@@ -66,6 +84,13 @@ jobs:
         with:
           name: windows-qt-app
           path: deploy/
+
+      - name: Upload Linux artifact
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-qt-binary
+          path: build/
 
       - name: Upload Raspberry Pi artifact
         if: matrix.os == 'raspberrypi'
