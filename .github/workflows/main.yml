@@ -8,16 +8,15 @@ jobs:
     name: "Build Qt App"
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+        os: [ubuntu-latest, windows-latest, raspberrypi]
+    runs-on: ${{ matrix.os == 'raspberrypi' && 'ubuntu-latest' || matrix.os }}
 
     steps:
-      # Checkout
       - uses: actions/checkout@v4
 
       # --- OS dependencies ---
-      - name: Install Ninja (Linux)
-        if: matrix.os == 'ubuntu-latest'
+      - name: Install Ninja
+        if: matrix.os != 'windows-latest'
         run: sudo apt-get update && sudo apt-get install -y ninja-build
 
       - name: Install Ninja (Windows)
@@ -31,7 +30,7 @@ jobs:
           version: '6.5.2'
           host: ${{ matrix.os == 'windows-latest' && 'windows' || 'linux' }}
           target: desktop
-          arch: ${{ matrix.os == 'windows-latest' && 'win64_msvc2019_64' || '' }}
+          arch: ${{ matrix.os == 'windows-latest' && 'win64_msvc2019_64' || (matrix.os == 'raspberrypi' && 'arm64') || '' }}
 
       # --- MSVC setup ---
       - name: Setup MSVC
@@ -44,42 +43,23 @@ jobs:
           cmake -S qt_build_app -B build -G "Ninja Multi-Config"
           cmake --build build --config Release
 
-      # --- Windows: Deploy Qt (windeployqt) ---
-      - name: Run windeployqt
+      # --- Windows Deploy ---
+      - name: Deploy Windows EXE
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          mkdir deploy
+          if (-not (Test-Path "deploy")) { New-Item -ItemType Directory -Path "deploy" }
           $exe = Get-ChildItem build/Release/*.exe | Select-Object -First 1
-          echo "Deploying $exe"
           windeployqt --release $exe.FullName --dir deploy
-
-        # --- Windows: Deploy Qt en bundel MSVC runtime DLLs ---
-      - name: Run windeployqt and bundle MSVC runtime
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        run: |
-          if (-not (Test-Path "deploy")) {
-            New-Item -ItemType Directory -Path "deploy"
-          }
-          $exe = Get-ChildItem build/Release/*.exe | Select-Object -First 1
-          echo "Deploying $exe"
-          
-          # Deploy Qt libraries
-          windeployqt --release $exe.FullName --dir deploy
-          
-          # Locate MSVC runtime DLLs (aanpassen aan jouw VS installatie pad)
           $msvcPath = "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Redist\MSVC"
           $latestVersion = Get-ChildItem $msvcPath | Sort-Object Name -Descending | Select-Object -First 1
           $dllPath = Join-Path $latestVersion.FullName "x64\Microsoft.VC142.CRT"
-      
-          # Copy runtime DLLs to deploy folder
           Copy-Item "$dllPath\vcruntime140_1.dll" -Destination deploy
           Copy-Item "$dllPath\msvcp140.dll" -Destination deploy
           Copy-Item "$dllPath\concrt140.dll" -Destination deploy
           Copy-Item "$dllPath\ucrtbase.dll" -Destination deploy
 
-      # --- Upload artifacts so you can download them ---
+      # --- Upload artifacts ---
       - name: Upload Windows artifact
         if: matrix.os == 'windows-latest'
         uses: actions/upload-artifact@v4
@@ -87,10 +67,9 @@ jobs:
           name: windows-qt-app
           path: deploy/
 
-      - name: Upload Linux artifact
-        if: matrix.os == 'ubuntu-latest'
+      - name: Upload Raspberry Pi artifact
+        if: matrix.os == 'raspberrypi'
         uses: actions/upload-artifact@v4
         with:
-          name: linux-qt-binary
+          name: raspberrypi-qt-binary
           path: build/
-
