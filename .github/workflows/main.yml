@@ -43,3 +43,29 @@ jobs:
         run: |
           cmake -S qt_build_app -B build -G "Ninja Multi-Config"
           cmake --build build --config Release
+
+      # --- WINDOWS: DEPLOY QT (maak werkende .exe package) ---
+      - name: Run windeployqt
+        if: matrix.os == 'windows-latest'
+        run: |
+          mkdir deploy
+          # Zoek automatisch de exe
+          $exe = Get-ChildItem build/Release/*.exe | Select-Object -First 1
+          echo "Deploying $exe"
+          windeployqt --release $exe.FullName --dir deploy
+
+      # --- WINDOWS ARTIFACT: COMPLETE APP FOLDER ---
+      - name: Upload Windows EXE + Qt DLLs
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v3
+        with:
+          name: windows-qt-app
+          path: deploy/
+
+      # --- LINUX ARTIFACT ---
+      - name: Upload Linux Binary
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v3
+        with:
+          name: linux-qt-binary
+          path: build/
