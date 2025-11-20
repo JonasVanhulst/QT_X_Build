@@ -4,17 +4,18 @@ on:
   push:
 
 jobs:
-  build_and_release:
-    name: "Build Qt App & Release"
+  build:
+    name: "Build Qt App"
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
 
     steps:
+      # Checkout
       - uses: actions/checkout@v4
 
-      # --- OS DEPENDENCIES ---
+      # --- OS dependencies ---
       - name: Install Ninja (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get update && sudo apt-get install -y ninja-build
@@ -32,7 +33,7 @@ jobs:
           target: desktop
           arch: ${{ matrix.os == 'windows-latest' && 'win64_msvc2019_64' || '' }}
 
-      # --- MSVC alleen op Windows ---
+      # --- MSVC setup ---
       - name: Setup MSVC
         if: matrix.os == 'windows-latest'
         uses: ilammy/msvc-dev-cmd@v1
@@ -43,7 +44,7 @@ jobs:
           cmake -S qt_build_app -B build -G "Ninja Multi-Config"
           cmake --build build --config Release
 
-      # --- Windows: Deploy Qt ---
+      # --- Windows: Deploy Qt (windeployqt) ---
       - name: Run windeployqt
         if: matrix.os == 'windows-latest'
         shell: pwsh
@@ -53,30 +54,18 @@ jobs:
           echo "Deploying $exe"
           windeployqt --release $exe.FullName --dir deploy
 
-      # --- Upload Artifacts to Release ---
-      - name: Create Release
-        id: create_release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: Release ${{ github.ref_name }}
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload Windows release assets
+      # --- Upload artifacts so you can download them ---
+      - name: Upload Windows artifact
         if: matrix.os == 'windows-latest'
-        uses: softprops/action-gh-release@v1
+        uses: actions/upload-artifact@v4
         with:
-          files: deploy/**/*
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: windows-qt-app
+          path: deploy/
 
-      - name: Upload Linux release assets
+      - name: Upload Linux artifact
         if: matrix.os == 'ubuntu-latest'
-        uses: softprops/action-gh-release@v1
+        uses: actions/upload-artifact@v4
         with:
-          files: build/**/* 
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: linux-qt-binary
+          path: build/
+
